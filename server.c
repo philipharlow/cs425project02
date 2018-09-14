@@ -21,10 +21,11 @@ int main(int argc, char * argv[]) {
 
     struct sockaddr_in sin;
     int addrlen = sizeof(sin);
-    int buflen;
+    int buflen, readVal;
+    char buffer[1026];
 
     //create socket file descriptor
-    if(sock_desc = socket(PF_INET, SOCK_STREAM, 0) == 0) {
+    if((sock_desc = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
         perror("Server failed to create socket\n");
         return 1;
     }
@@ -63,24 +64,22 @@ int main(int argc, char * argv[]) {
         perror("Server failed on accept\n");
         return 1;
     }
-    while(readVal > 0) {
-        //first find the length of the payload from the client
-        readVal = read(new_socket, &buflen, 4);
+    //first find the length of the payload
+    while((readVal = read(new_socket, &buflen, 4)) > 0) {
+
 
         //convert the length to little-endian
         buflen = ntohl(buflen);
 
-        fputs(stdout, "%d\n", buflen);
-
-        //allocate buffer for the size requested
-        char buffer[buflen+1];
-
+        printf("%d\n", buflen);
+        
         //read actual payload
-        readval = read(new_socket, &buffer, buflen);
+        readVal = read(new_socket, &buffer, buflen);
         //null terminate the string
-        buf[readval] = 0;
+        buffer[readVal] = '\n';
+        buffer[readVal+1] = 0;
 
-        fputs(stdout, buffer);
+        fputs(buffer, stdout);
     }
 
     return 0;

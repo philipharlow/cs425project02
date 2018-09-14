@@ -21,8 +21,9 @@ int main(int argc, char * argv[]) {
 
     struct sockaddr_in sin;
     int addrlen = sizeof(sin);
-    int buflen, readVal;
-    char buffer[1026];
+    int buflen, readVal, n, tempBuflen;
+    char buffer[1026], *bufptr;
+    bufptr = buffer;
 
     //create socket file descriptor
     if((sock_desc = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
@@ -70,16 +71,23 @@ int main(int argc, char * argv[]) {
 
         //convert the length to little-endian
         buflen = ntohl(buflen);
+        tempBuflen = buflen;
 
         printf("%d\n", buflen);
+        bufptr = buffer;
         
-        //read actual payload
-        readVal = read(new_socket, &buffer, buflen);
+        while ( (tempBuflen > 0) && (n = read(new_socket, bufptr, tempBuflen)) > 0 ) {
+            bufptr = bufptr + n;
+            tempBuflen = tempBuflen - n;
+        }
+        printf("we exited the loop\n");
         //null terminate the string
-        buffer[readVal] = '\n';
-        buffer[readVal+1] = 0;
+        *bufptr = '\n';
+        bufptr++;
+        bufptr = buffer;
 
-        fputs(buffer, stdout);
+        fputs(bufptr, stdout);
+        
     }
 
     return 0;

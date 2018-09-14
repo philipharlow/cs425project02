@@ -84,6 +84,7 @@ int main(int argc, char * argv[]) {
         //null terminate the string
         *bufptr = '\n';
         bufptr++;
+        *bufptr = '\0';
         bufptr = buffer;
 
         fputs(bufptr, stdout);

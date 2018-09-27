@@ -15,7 +15,7 @@ It recieves any text sent from its client and prints that text to stdout. The se
 #include <netinet/in.h>
 #include <netdb.h>
 int sock_desc, sock_desc2, new_socket;  //new_socket will be the socket listeing to the localhost telnet daemon, sock_desc2 will be listing to the clientProxy
-int port_number, readVal;
+int port_number_clientProxy, port_number_serverProxy, readVal;
 void readString(int readSock, int writeSock);
 
 int main(int argc, char * argv[]) {
@@ -37,33 +37,38 @@ int main(int argc, char * argv[]) {
     }
 
     //Check to see if the user inputed all the required arguments, if not terminate the program
-    if(argc < 2) {
-        perror("Invalid parameters, to run program please input as server [serverPort]\n");
-        perror("\t[serverPort] should always be 6200\n");
+    if(argc < 4) {
+        perror("Invalid parameters, to run program please input as:\n");
+        perror("\tclientProxy 5200 [serverIP] 6200\n");
+        perror("\t[serverIP] is the ipAddress of the machine your trying to connect\n");
         return 1;
     }
 
     //convert command line argument to int
-    port_number = atoi(argv[1]);
+    port_number_clientProxy = atoi(argv[1]);
+    //convert command line argument to int
+    port_number_serverProxy = atoi(argv[3]);
+
 
     //set the protocol to PF_INET
     sin.sin_family = PF_INET;
     sout.sin_family = PF_INET;
 
     //set the port number to the specified port from command line
-    sin.sin_port = htons(port_number);
-    sout.sin_port = htons(23);
+    sin.sin_port = htons(port_number_clientProxy);
+    sout.sin_port = htons(port_number_serverProxy);
 
     //set the socket to accept connections from any ip
     sin.sin_addr.s_addr = INADDR_ANY;
 
-    //set our address to the telnet daemon
-    struct hostent *hptr;
-	if((hptr = gethostbyname("localhost")) == NULL){
-		fprintf(stderr, "ERROR: Could not get address for localhost.\n");
+    //set the address of the serverProxy to connect to
+    in_addr_t address;
+	address = inet_addr(argv[2]);
+	if(address == -1){
+		fprintf(stderr, "ERROR: Could not get address from IP.\n");
 		exit(1);
 	}
-	memcpy(&sout.sin_addr, hptr->h_addr, hptr->h_length);
+	memcpy(&sout.sin_addr, &address, sizeof(address));
 
     //bind the server socket to the given port number
     if(bind(sock_desc, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
@@ -81,7 +86,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
     
-    /* Connect to the server */
+    /* Connect to the serverProxy */
 	int connectDesc = connect(new_socket, (struct sockaddr*)&sout, sizeof(sout));
 	if(connectDesc < 0){
 		fprintf(stderr, "ERROR: could not connect to telnet daemon\n");
@@ -119,7 +124,6 @@ int main(int argc, char * argv[]) {
             }
         }
     }
-
     return 0;
 
 }
@@ -131,7 +135,7 @@ void readString(int readSock, int writeSock) {
     ptr = buf;
     //read in the bytes
     int val = read(readSock, ptr, 500);
-    if(val == 0){
+    if(val == 0) {
         close(sock_desc);
         close(sock_desc2);
         close(new_socket);

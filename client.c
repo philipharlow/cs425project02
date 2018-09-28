@@ -67,7 +67,7 @@
 		 }
 		 
 		 /* Write the payload to the server */
-		 result = write(sockDesc, &input, sizeofPayload);
+		 result = write(sockDesc, input, strlen(input));
 		 if(result < 0){
 			 fprintf(stderr, "ERROR: Couldn't write payload to server.\n");
 			 exit(1);

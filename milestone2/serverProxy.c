@@ -14,24 +14,26 @@ It recieves any text sent from its client and prints that text to stdout. The se
 #include <string.h>
 #include <netinet/in.h>
 #include <netdb.h>
-int sock_desc, sock_desc2, new_socket;  //new_socket will be the socket listeing to the localhost telnet daemon, sock_desc2 will be listing to the clientProxy
+int sock_desc, clientProxy, telnet;  //telnet will be the socket listening to the localhost telnet daemon, clientProxy will be listing to the clientProxy
 int port_number, readVal;
 void readString(int readSock, int writeSock);
 
 int main(int argc, char * argv[]) {
-    fd_set listen;
+	perror("we started running\n");
+    fd_set listen1;
     struct timeval timeout;
     int nfound;
     struct sockaddr_in sin, sout;
     int addrlen = sizeof(sin);
     int buflen, readVal;
+	int largestSocket;
 
     //create socket file descriptor
     if((sock_desc = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
         perror("Server failed to create socket\n");
         return 1;
     }
-    if((new_socket = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
+    if((telnet = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
         perror("Server failed to create socket\n");
         return 1;
     }
@@ -57,6 +59,8 @@ int main(int argc, char * argv[]) {
     //set the socket to accept connections from any ip
     sin.sin_addr.s_addr = INADDR_ANY;
 
+	perror("about to gethostbyname of localhost\n");
+	
     //set our address to the telnet daemon
     struct hostent *hptr;
 	if((hptr = gethostbyname("localhost")) == NULL){
@@ -65,57 +69,74 @@ int main(int argc, char * argv[]) {
 	}
 	memcpy(&sout.sin_addr, hptr->h_addr, hptr->h_length);
 
+	perror("about to bind the socket\n");
+	
     //bind the server socket to the given port number
     if(bind(sock_desc, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         perror("Server failed to bind port number\n");
         return 1;
     }
+	
+	perror("about to listen for client\n");
 
     if(listen(sock_desc, 1) < 0) {
         perror("Server failed listening for clients\n");
         return 1;
     }
 
-    if((sock_desc2 = accept(sock_desc, (struct sockaddr *)&sin,(socklen_t*)&addrlen)) < 0) {
+	
+	perror("about to accept connection from client\n");
+    if((clientProxy = accept(sock_desc, (struct sockaddr *)&sin,(socklen_t*)&addrlen)) < 0) {
         perror("Server failed on accept\n");
         return 1;
     }
     
+	perror("about to connect to telnet daemon\n");
+	
     /* Connect to the server */
-	int connectDesc = connect(new_socket, (struct sockaddr*)&sout, sizeof(sout));
+	int connectDesc = connect(telnet, (struct sockaddr*)&sout, sizeof(sout));
 	if(connectDesc < 0){
 		fprintf(stderr, "ERROR: could not connect to telnet daemon\n");
 		exit(1);
 	}
 
+	
+	perror("Connected to telnet daemon\n");
+	if(telnet > clientProxy){
+		largestSocket = telnet;
+	}else{
+		largestSocket = clientProxy;
+	}
     while(1) {
-        FD_ZERO(&listen);
-        FD_SET(new_socket, &listen);
-        FD_SET(sock_desc2, &listen);
+        FD_ZERO(&listen1);
+        FD_SET(telnet, &listen1);
+        FD_SET(clientProxy, &listen1);
         timeout.tv_sec = 600;
         timeout.tv_usec = 0;
-
-        nfound = select(sock_desc2 + 1, &listen, (fd_set *)0, (fd_set *)0, &timeout);
+		
+        nfound = select(largestSocket + 1, &listen1, (fd_set *)0, (fd_set *)0, &timeout);
 
         if(nfound == 0) {
             //we timed out
             //close the sockets
             close(sock_desc);
-            close(sock_desc2);
-            close(new_socket);
+            close(clientProxy);
+            close(telnet);
             exit(0);
         }
         else if(nfound < 0) {
             //something went wrong. handle the error
+			perror("select returned less than 0\n");
+			exit(1);
         }
         else {
-            if(FD_ISSET(new_socket, &listen)) {
+            if(FD_ISSET(telnet, &listen1)) {
                 //if this is set we know we must read from the telnet daemon and pass it to the clientProxy
-                readString(new_socket, sock_desc2);
+                readString(telnet, clientProxy);
             }
-            if(FD_ISSET(sock_desc2, &listen)) {
+            if(FD_ISSET(clientProxy, &listen1)) {
                 //if this is set we must read from the clientProxy and pass it on to the telnet daemon
-                readString(sock_desc2, new_socket);
+                readString(clientProxy, telnet);
             }
         }
     }
@@ -127,18 +148,26 @@ int main(int argc, char * argv[]) {
 //a function to read in the bytes from the socket and store them into a buffer and print that string to stdout
 void readString(int readSock, int writeSock) {
     //initialize the buffer
-    char buf[500], *ptr;
-    ptr = buf;
+	/* char buf[500], *ptr;
+    ptr = buf; */
+	
+	char *ptr = NULL;//##
+	ptr = malloc(500);
+	
     //read in the bytes
-    int val = read(readSock, ptr, 500);
+    int val = read(readSock, &ptr, 500);  
     if(val == 0){
         close(sock_desc);
-        close(sock_desc2);
-        close(new_socket);
+        close(clientProxy);
+        close(telnet);
 		exit(0);
 	}
+	
+	char *test = "testing\n";
+	printf("%s", test);
+	printf("Server: %s\n", ptr);
     //write to the destination socket
-    int result = write(writeSock, ptr, strlen(ptr));
+    int result = write(writeSock, ptr, val);
 	if(result < 0){
 		fprintf(stderr, "ERROR: Couldn't write size to server.\n");
 		exit(1);

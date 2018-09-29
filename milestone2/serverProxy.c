@@ -2,8 +2,7 @@
 Author: Philip Harlow & Marcos Samayoa
 Class: cs425
 Teacher: Homer
-Program:  This is a server, it opens a port to listen at and accepts one connection at a time from any ip_address,
-It recieves any text sent from its client and prints that text to stdout. The server closes when the client terminates the connection.
+Program:  This is a server that connects to two different sockets and relays information from one socket to the other.
 */
 
 #include <sys/types.h>
@@ -19,13 +18,11 @@ int port_number, readVal;
 void readString(int readSock, int writeSock);
 
 int main(int argc, char * argv[]) {
-	perror("we started running\n");
     fd_set listen1;
     struct timeval timeout;
     int nfound;
     struct sockaddr_in sin, sout;
     int addrlen = sizeof(sin);
-    int buflen, readVal;
 	int largestSocket;
 
     //create socket file descriptor
@@ -58,8 +55,6 @@ int main(int argc, char * argv[]) {
 
     //set the socket to accept connections from any ip
     sin.sin_addr.s_addr = INADDR_ANY;
-
-	perror("about to gethostbyname of localhost\n");
 	
     //set our address to the telnet daemon
     struct hostent *hptr;
@@ -68,30 +63,22 @@ int main(int argc, char * argv[]) {
 		exit(1);
 	}
 	memcpy(&sout.sin_addr, hptr->h_addr, hptr->h_length);
-
-	perror("about to bind the socket\n");
 	
     //bind the server socket to the given port number
     if(bind(sock_desc, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         perror("Server failed to bind port number\n");
         return 1;
     }
-	
-	perror("about to listen for client\n");
 
     if(listen(sock_desc, 1) < 0) {
         perror("Server failed listening for clients\n");
         return 1;
     }
 
-	
-	perror("about to accept connection from client\n");
     if((clientProxy = accept(sock_desc, (struct sockaddr *)&sin,(socklen_t*)&addrlen)) < 0) {
         perror("Server failed on accept\n");
         return 1;
     }
-    
-	perror("about to connect to telnet daemon\n");
 	
     /* Connect to the server */
 	int connectDesc = connect(telnet, (struct sockaddr*)&sout, sizeof(sout));
@@ -100,8 +87,6 @@ int main(int argc, char * argv[]) {
 		exit(1);
 	}
 
-	
-	perror("Connected to telnet daemon\n");
 	if(telnet > clientProxy){
 		largestSocket = telnet;
 	}else{
@@ -132,7 +117,7 @@ int main(int argc, char * argv[]) {
         else {
             if(FD_ISSET(telnet, &listen1)) {
                 //if this is set we know we must read from the telnet daemon and pass it to the clientProxy
-                readString(telnet, clientProxy);
+                readString(telnet, clientProxy); 
             }
             if(FD_ISSET(clientProxy, &listen1)) {
                 //if this is set we must read from the clientProxy and pass it on to the telnet daemon
@@ -155,7 +140,7 @@ void readString(int readSock, int writeSock) {
 	ptr = malloc(500);
 	
     //read in the bytes
-    int val = read(readSock, &ptr, 500);  
+    int val = read(readSock, ptr, 500);  
     if(val == 0){
         close(sock_desc);
         close(clientProxy);
@@ -163,9 +148,6 @@ void readString(int readSock, int writeSock) {
 		exit(0);
 	}
 	
-	char *test = "testing\n";
-	printf("%s", test);
-	printf("Server: %s\n", ptr);
     //write to the destination socket
     int result = write(writeSock, ptr, val);
 	if(result < 0){

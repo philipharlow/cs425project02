@@ -2,8 +2,8 @@
 Author: Philip Harlow & Marcos Samayoa
 Class: cs425
 Teacher: Homer
-Program:  This is a server, it opens a port to listen at and accepts one connection at a time from any ip_address,
-It recieves any text sent from its client and prints that text to stdout. The server closes when the client terminates the connection.
+Program:  This is a client that connects to two different sockets and relays information from one to the other.
+
 */
 
 #include <sys/types.h>
@@ -25,7 +25,6 @@ int main(int argc, char * argv[]) {
     int nfound;
     struct sockaddr_in sin, sout;
     int addrlen = sizeof(sin);
-    int buflen, readVal;
 	int largestSocket;
 
     //create socket file descriptor
@@ -141,22 +140,18 @@ int main(int argc, char * argv[]) {
 //a function to read in the bytes from the socket and store them into a buffer and print that string to stdout
 void readString(int readSock, int writeSock) {
     //initialize the buffer
-    
-	/* char buf[500], *ptr;
-    ptr = buf; */
-	
-	char *ptr;                        //##
-	ptr = malloc(500);//##
+	char *ptr;
+	ptr = malloc(500);
 	
     //read in the bytes
-    int val = read(readSock, &ptr, 500);
+    int val = read(readSock, ptr, 500);
     if(val == 0) {
         close(sock_desc);
         close(serverProxy);
         close(telnetDaemon);
 		exit(0);
 	}
-	printf("Client: %s\n", ptr);
+	
     //write to the destination socket
     int result = write(writeSock, ptr, val);
 	if(result < 0){

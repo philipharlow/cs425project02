@@ -18,13 +18,13 @@ int port_number, readVal, heartbeatCount, set;
 void * id;
 void readString(int readSock, int writeSock, int isHeader);
 
-struct node {
+struct Packet {
     int type;
     int bufferLen;
     void * buffer;
 };
 
-struct node *header;
+struct Packet *header;
 
 int main(int argc, char * argv[]) {
     fd_set listen1;
@@ -37,7 +37,7 @@ int main(int argc, char * argv[]) {
     int addrlen = sizeof(sin);
 	int largestSocket;
 
-    header = malloc(sizeof(struct node));
+    header = malloc(sizeof(struct Packet));
 
     //create socket file descriptor
     if((sock_desc = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
@@ -51,7 +51,7 @@ int main(int argc, char * argv[]) {
 
     //Check to see if the user inputed all the required arguments, if not terminate the program
     if(argc < 2) {
-        perror("Invalid parameters, to run program please input as server [serverPort]\n");
+        perror("Invalid parameters, to run program please input as serverProxy [serverPort]\n");
         perror("\t[serverPort] should always be 6200\n");
         return 1;
     }
@@ -240,6 +240,7 @@ void readString(int readSock, int writeSock, int isHeader) {
         }
         else {
             ptr = malloc(header->bufferLen);
+            n = header->bufferLen;
             while(n > 0) {
                 val = read(readSock, ptr, n);
                 n = n - val;

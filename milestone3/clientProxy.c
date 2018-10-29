@@ -20,7 +20,7 @@ Program:  This is a client that connects to two different sockets and relays inf
 int sock_desc, serverProxy, telnetDaemon;  //telnetDaemon will be the socket listeing to the localhost telnet daemon, serverProxy will be listing to the clientProxy
 int port_number_clientProxy, port_number_serverProxy, readVal;
 int hbDiff = 0; // The difference between heartbeats sent and recieved.
-void readString(int readSock, int writeSock);
+void readString(int readSock, int writeSock, int isHeader);
 void sendHeartbeat(int writeSock, int SID);
 void delay(int timeToDelay);
 
@@ -31,9 +31,12 @@ struct Packet{
 	void *payload; 
 };
 
+struct Packet *ptr;
+
 int main(int argc, char * argv[]) {
     fd_set listen1;
     struct timeval timeout;
+    ptr = malloc(sizeof(struct Packet));
     int nfound;
     struct sockaddr_in sin, sout;
     int addrlen = sizeof(sin);
@@ -175,12 +178,12 @@ int main(int argc, char * argv[]) {
         }
         else {
             if(FD_ISSET(telnetDaemon, &listen1)) {
-                //if this is set we know we must read from the telnet daemon and pass it to the clientProxy
-                readString(telnetDaemon, serverProxy);
+                //if this is set we know we must read from the telnet daemon and pass it to the serverProxy
+                readString(telnetDaemon, serverProxy, 0);
             }
             if(FD_ISSET(serverProxy, &listen1)) {
-                //if this is set we must read from the clientProxy and pass it on to the telnet daemon
-                readString(serverProxy, telnetDaemon);
+                //if this is set we must read from the serverProxy and pass it on to the telnet daemon
+                readString(serverProxy, telnetDaemon, 1);
             }
         }
 		
@@ -191,35 +194,76 @@ int main(int argc, char * argv[]) {
 }
 
 //a function to read in the bytes from the socket and store them into a buffer and print that string to stdout
-void readString(int readSock, int writeSock) {
+void readString(int readSock, int writeSock, int isHeader) {
     //initialize the buffer
-	struct Packet ptr; //= malloc(sizeof(*ptr));
+    char * str = NULL;
+    int val, result, n;
+
 	
 	// Possibly need to malloc ptr.payload = malloc(500);
 	// 		remember Packet.payload is set to payload[500];
 	
     //read in the bytes
-    int val = read(readSock, &ptr, 500);
-    if(val == 0) {
-        close(sock_desc);
-        close(serverProxy);
-        close(telnetDaemon);
-		exit(0);
-	}
-	
-	/* If this is a data message */
-	if(ptr.type == 0){
-		//write to the destination socket
-		int result = write(writeSock, &ptr, val);
-		if(result < 0){
-			fprintf(stderr, "ERROR: Couldn't write size to server.\n");
-			exit(1);
-		}
-	}
-	/* This is a heartbeat message */
-	else{
-		hbDiff --;
-	}
+    if(isHeader) {
+        n = sizeof(int) * 2;
+        while(n > 0) {
+            val = read(readSock, &ptr, n);
+            n = n - val;
+            if(val == 0) {
+                close(sock_desc);
+                close(serverProxy);
+                close(telnetDaemon);
+                exit(0);
+            }
+        }
+        if(ptr->type == 1) {
+            hbDiff--;
+        }
+        else {
+            str = malloc(ptr->length);
+            n = ptr->length;
+            while(n > 0) {
+                val = read(readSock, str, n);
+                n = n - val;
+                if(val == 0) {
+                    close(sock_desc);
+                    close(serverProxy);
+                    close(telnetDaemon);
+                    exit(0);
+                }
+            }
+            result = write(writeSock, ptr, ptr->length);
+            if(result < 0){
+                fprintf(stderr, "ERROR: Couldn't write 'message' to telnetD.\n");
+                exit(1);
+            }
+        }
+    }
+    else {
+        //read in the bytes
+        str = malloc(500);
+        val = read(readSock, str, 500);  
+        if(val == 0){
+            close(sock_desc);
+            close(serverProxy);
+            close(telnetDaemon);
+            exit(0);
+        }
+        ptr->type = 0;
+        ptr->length = val * sizeof(char);
+        ptr->payload = str;
+        //write to the destination socket
+        result = write(writeSock, &ptr, sizeof(int) * 2);
+        if(result < 0){
+            fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
+            exit(1);
+        }
+        result = write(writeSock, ptr->payload, ptr->length);
+        if(result < 0){
+            fprintf(stderr, "ERROR: Couldn't write 'buffer' to client.\n");
+            exit(1);
+        }
+    }
     
 }
 
@@ -231,16 +275,14 @@ void readString(int readSock, int writeSock) {
  * 			  SID: The session ID to write in the payload of the message.
  */
 void sendHeartbeat(int writeSock, int SID){
-	struct Packet p;
-	p.type = 1;   // type = 1 means this is a heartbeat message
-	p.payload = malloc(sizeof(int));
-	//sprintf(p.payload, "%d", SID);
-	p.payload = &SID;
+	ptr->type = 1;   // type = 1 means this is a heartbeat message
+    
+	ptr->payload = &SID;
 	//printf("Payload: %s\n", p.payload);
-	p.length = sizeof(p.payload);
+	ptr->length = sizeof(ptr->payload);
 	
-	write(writeSock, &p, sizeof(p) - sizeof(void *));
-	write(writeSock, p.payload, p.length);
+	write(writeSock, &ptr, sizeof(ptr) - sizeof(void *));
+	write(writeSock, ptr->payload, ptr->length);
 	return;
 }
 

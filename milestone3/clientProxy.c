@@ -179,10 +179,12 @@ int main(int argc, char * argv[]) {
         else {
             if(FD_ISSET(telnetDaemon, &listen1)) {
                 //if this is set we know we must read from the telnet daemon and pass it to the serverProxy
+                //we pass an additional variable that represents if the stream to read from has a header on it
                 readString(telnetDaemon, serverProxy, 0);
             }
             if(FD_ISSET(serverProxy, &listen1)) {
                 //if this is set we must read from the serverProxy and pass it on to the telnet daemon
+                //we pass an additional variable that represents if the stream to read from has a header on it
                 readString(serverProxy, telnetDaemon, 1);
             }
         }

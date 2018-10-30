@@ -202,7 +202,9 @@ void readString(int readSock, int writeSock, int isHeader) {
     if(isHeader) {
         n = sizeof(int) * 2;
         while(n > 0) {
-            val = read(readSock, &header, n);
+            val = read(readSock, header, n);
+            header->type = ntohl(header->type);
+            header->bufferLen = ntohl(header->bufferLen);
             n = n - val;
             if(val == 0) {
                 close(sock_desc);
@@ -224,15 +226,15 @@ void readString(int readSock, int writeSock, int isHeader) {
                     exit(0);
                 }
             }
-            header->type = 1;
-            header->bufferLen = sizeof(int);
+            header->type = htonl(1);
+            header->bufferLen = htonl(sizeof(int));
             header->buffer = id;
-            result = write(readSock, &header, sizeof(int) * 2);
+            result = write(readSock, header, sizeof(int) * 2);
             if(result < 0){
                 fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
                 exit(1);
             }
-            result = write(readSock, &id, sizeof(int));
+            result = write(readSock, header->buffer, sizeof(int));
             if(result < 0){
                 fprintf(stderr, "ERROR: Couldn't write 'ID' to client.\n");
                 exit(1);
@@ -268,11 +270,11 @@ void readString(int readSock, int writeSock, int isHeader) {
             close(telnet);
             exit(0);
         }
-        header->type = 0;
-        header->bufferLen = val * sizeof(char);
+        header->type = htonl(0);
+        header->bufferLen = htonl(val * sizeof(char));
         header->buffer = ptr;
         //write to the destination socket
-        result = write(writeSock, &header, sizeof(int) * 2);
+        result = write(writeSock, header, sizeof(int) * 2);
         if(result < 0){
             fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
             exit(1);

@@ -209,7 +209,11 @@ void readString(int readSock, int writeSock, int isHeader) {
     if(isHeader) {
         n = sizeof(int) * 2;
         while(n > 0) {
-            val = read(readSock, &ptr, n);
+            printf("before first read\n");
+            val = read(readSock, ptr, n);
+            ptr->type = ntohl(ptr->type);
+            ptr->length = ntohl(ptr->length);
+            printf("%d %d\n", ptr->type, ptr->length);
             n = n - val;
             if(val == 0) {
                 close(sock_desc);
@@ -251,11 +255,11 @@ void readString(int readSock, int writeSock, int isHeader) {
             close(telnetDaemon);
             exit(0);
         }
-        ptr->type = 0;
-        ptr->length = val * sizeof(char);
+        ptr->type = htonl(0);
+        ptr->length = htonl(val * sizeof(char));
         ptr->payload = str;
         //write to the destination socket
-        result = write(writeSock, &ptr, sizeof(int) * 2);
+        result = write(writeSock, ptr, sizeof(int) * 2);
         if(result < 0){
             fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
             exit(1);
@@ -277,13 +281,13 @@ void readString(int readSock, int writeSock, int isHeader) {
  * 			  SID: The session ID to write in the payload of the message.
  */
 void sendHeartbeat(int writeSock, int SID){
-	ptr->type = 1;   // type = 1 means this is a heartbeat message
+	ptr->type = htonl(1);   // type = 1 means this is a heartbeat message
     
 	ptr->payload = &SID;
 	//printf("Payload: %s\n", p.payload);
-	ptr->length = sizeof(ptr->payload);
+	ptr->length = htonl(sizeof(ptr->payload));
 	
-	write(writeSock, &ptr, sizeof(ptr) - sizeof(void *));
+	write(writeSock, ptr, sizeof(ptr) - sizeof(void *));
 	write(writeSock, ptr->payload, ptr->length);
 	return;
 }

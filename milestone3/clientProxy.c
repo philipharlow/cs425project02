@@ -19,10 +19,11 @@ Program:  This is a client that connects to two different sockets and relays inf
 
 int sock_desc, serverProxy, telnetDaemon;  //telnetDaemon will be the socket listeing to the localhost telnet daemon, serverProxy will be listing to the clientProxy
 int port_number_clientProxy, port_number_serverProxy, readVal;
-int hbDiff = 0; // The difference between heartbeats sent and recieved.
+int hbDiff; // The difference between heartbeats sent and recieved.
 void readString(int readSock, int writeSock, int isHeader);
 void sendHeartbeat(int writeSock, int SID);
 void delay(int timeToDelay);
+void * save;
 
 
 struct Packet{
@@ -35,8 +36,10 @@ struct Packet *ptr;
 
 int main(int argc, char * argv[]) {
     fd_set listen1;
+    hbDiff = 0;
     struct timeval timeout;
     ptr = malloc(sizeof(struct Packet));
+    save = ptr;
     int nfound;
     struct sockaddr_in sin, sout;
     int addrlen = sizeof(sin);
@@ -211,9 +214,7 @@ void readString(int readSock, int writeSock, int isHeader) {
         while(n > 0) {
             printf("before first read\n");
             val = read(readSock, ptr, n);
-            ptr->type = ntohl(ptr->type);
-            ptr->length = ntohl(ptr->length);
-            printf("%d %d\n", ptr->type, ptr->length);
+            ptr += val;
             n = n - val;
             if(val == 0) {
                 close(sock_desc);
@@ -222,11 +223,16 @@ void readString(int readSock, int writeSock, int isHeader) {
                 exit(0);
             }
         }
+        ptr = save;
+        n = sizeof(int);
+        ptr->type = ntohl(ptr->type);
+        ptr->length = ntohl(ptr->length);
+        printf("%d %d\n", ptr->type, ptr->length);
         if(ptr->type == 1) {
             hbDiff--;
         }
         else {
-            str = malloc(ptr->length);
+            str = malloc(500);
             n = ptr->length;
             while(n > 0) {
                 val = read(readSock, str, n);
@@ -238,7 +244,7 @@ void readString(int readSock, int writeSock, int isHeader) {
                     exit(0);
                 }
             }
-            result = write(writeSock, ptr, ptr->length);
+            result = write(writeSock, str, ptr->length);
             if(result < 0){
                 fprintf(stderr, "ERROR: Couldn't write 'message' to telnetD.\n");
                 exit(1);
@@ -256,17 +262,28 @@ void readString(int readSock, int writeSock, int isHeader) {
             exit(0);
         }
         ptr->type = htonl(0);
+        //ptr->type = 0;
+
+        int len = val;
         ptr->length = htonl(val * sizeof(char));
+        //ptr->length = val * sizeof(char);
+
         ptr->payload = str;
         //write to the destination socket
-        result = write(writeSock, ptr, sizeof(int) * 2);
+        result = write(writeSock, ptr, sizeof(struct Packet) - sizeof(void *));
         if(result < 0){
-            fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
+            fprintf(stderr, "ERROR: Couldn't write 'header' to server.\n");
+            close(sock_desc);
+            close(serverProxy);
+            close(telnetDaemon);
             exit(1);
         }
-        result = write(writeSock, ptr->payload, ptr->length);
+        result = write(writeSock, ptr->payload, len * sizeof(char));
         if(result < 0){
-            fprintf(stderr, "ERROR: Couldn't write 'buffer' to client.\n");
+            fprintf(stderr, "ERROR: Couldn't write 'buffer' to server.\n");
+            close(sock_desc);
+            close(serverProxy);
+            close(telnetDaemon);
             exit(1);
         }
     }
@@ -282,13 +299,18 @@ void readString(int readSock, int writeSock, int isHeader) {
  */
 void sendHeartbeat(int writeSock, int SID){
 	ptr->type = htonl(1);   // type = 1 means this is a heartbeat message
+    //ptr->type = 1;   // type = 1 means this is a heartbeat message
+
     
 	ptr->payload = &SID;
+    int length = ptr->length;
 	//printf("Payload: %s\n", p.payload);
 	ptr->length = htonl(sizeof(ptr->payload));
+    //ptr->length = sizeof(ptr->payload);
+
 	
 	write(writeSock, ptr, sizeof(ptr) - sizeof(void *));
-	write(writeSock, ptr->payload, ptr->length);
+	write(writeSock, ptr->payload, length * sizeof(char));
 	return;
 }
 

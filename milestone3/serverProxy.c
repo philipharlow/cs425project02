@@ -16,7 +16,9 @@ Program:  This is a server that connects to two different sockets and relays inf
 int sock_desc, clientProxy, telnet;  //telnet will be the socket listening to the localhost telnet daemon, clientProxy will be listing to the clientProxy
 int port_number, readVal, heartbeatCount, set;
 void * id;
+void * save;
 void readString(int readSock, int writeSock, int isHeader);
+void sendHeartbeat(int clientProxy);
 
 struct Packet {
     int type;
@@ -38,6 +40,7 @@ int main(int argc, char * argv[]) {
 	int largestSocket;
 
     header = malloc(sizeof(struct Packet));
+    save = header;
 
     //create socket file descriptor
     if((sock_desc = socket(PF_INET, SOCK_STREAM, 0)) == 0) {
@@ -183,6 +186,8 @@ int main(int argc, char * argv[]) {
                 heartbeatCount = 0;
             }
         }
+        sleep(1);
+        sendHeartbeat(clientProxy);
     }
 
     return 0;
@@ -195,7 +200,7 @@ void readString(int readSock, int writeSock, int isHeader) {
 	/* char buf[500], *ptr;
     ptr = buf; */
 
-    int val, result, n;
+    int val, result, n, len;
 	char *ptr = NULL;//##
 	
 
@@ -203,8 +208,7 @@ void readString(int readSock, int writeSock, int isHeader) {
         n = sizeof(int) * 2;
         while(n > 0) {
             val = read(readSock, header, n);
-            header->type = ntohl(header->type);
-            header->bufferLen = ntohl(header->bufferLen);
+            header += val;
             n = n - val;
             if(val == 0) {
                 close(sock_desc);
@@ -213,36 +217,35 @@ void readString(int readSock, int writeSock, int isHeader) {
                 exit(0);
             }
         }
+        header = save;
+        header->type = ntohl(header->type);
+        //header->type = header->type;
+        header->bufferLen = ntohl(header->bufferLen);
+        //header->bufferLen = header->bufferLen;
+
+        len = header->bufferLen;
         if(header->type == 1) {
             heartbeatCount++;
-            n = header->bufferLen;
-            while(n > 0) {
-                val = read(readSock, id, n);
-                n = n - val;
-                if(val == 0) {
-                    close(sock_desc);
-                    close(clientProxy);
-                    close(telnet);
-                    exit(0);
+            if(id == NULL) {
+                n = len;
+                void * start;
+                while(n > 0) {
+                    val = read(readSock, id, n);
+                    id += val;
+                    n = n - val;
+                    if(val == 0) {
+                        close(sock_desc);
+                        close(clientProxy);
+                        close(telnet);
+                        exit(0);
+                    }
                 }
-            }
-            header->type = htonl(1);
-            header->bufferLen = htonl(sizeof(int));
-            header->buffer = id;
-            result = write(readSock, header, sizeof(int) * 2);
-            if(result < 0){
-                fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
-                exit(1);
-            }
-            result = write(readSock, header->buffer, sizeof(int));
-            if(result < 0){
-                fprintf(stderr, "ERROR: Couldn't write 'ID' to client.\n");
-                exit(1);
+                id = start;
             }
         }
         else {
-            ptr = malloc(header->bufferLen);
-            n = header->bufferLen;
+            ptr = malloc(len);
+            n = len;
             while(n > 0) {
                 val = read(readSock, ptr, n);
                 n = n - val;
@@ -253,7 +256,7 @@ void readString(int readSock, int writeSock, int isHeader) {
                     exit(0);
                 }
             }
-            result = write(writeSock, ptr, header->bufferLen);
+            result = write(writeSock, ptr, len);
             if(result < 0){
                 fprintf(stderr, "ERROR: Couldn't write 'message' to telnetD.\n");
                 exit(1);
@@ -271,19 +274,42 @@ void readString(int readSock, int writeSock, int isHeader) {
             exit(0);
         }
         header->type = htonl(0);
+        //header->type = 0;
+        printf("%d\n", header->type);
+        len = val;
         header->bufferLen = htonl(val * sizeof(char));
+        //header->bufferLen = val * sizeof(char);
         header->buffer = ptr;
         //write to the destination socket
-        result = write(writeSock, header, sizeof(int) * 2);
+        result = write(writeSock, header, sizeof(struct Packet) - sizeof(void *));
         if(result < 0){
-            fprintf(stderr, "ERROR: Couldn't write 'header' to client.\n");
+            fprintf(stderr, "telnet ERROR: Couldn't write 'header' to client.\n");
             exit(1);
         }
-        result = write(writeSock, header->buffer, header->bufferLen);
+        result = write(writeSock, header->buffer, len * sizeof(char));
         if(result < 0){
             fprintf(stderr, "ERROR: Couldn't write 'buffer' to client.\n");
             exit(1);
         }
     }
-    
+}
+
+void sendHeartbeat(int clientProxy) {
+    heartbeatCount--;
+    header->type = htonl(1);
+    //header->type = 1;
+    header->bufferLen = htonl(sizeof(int));
+    //header->bufferLen = sizeof(int);
+    printf("%zu\n", sizeof(int));
+    header->buffer = id;
+    int result = write(clientProxy, header, sizeof(struct Packet) - sizeof(void *));
+    if(result < 0){
+        fprintf(stderr, "telnet ERROR: Couldn't write 'header' to client.\n");
+        exit(1);
+    }
+    result = write(clientProxy, header->buffer, sizeof(int));
+    if(result < 0){
+        fprintf(stderr, "ERROR: Couldn't write 'ID' to client.\n");
+        exit(1);
+    }
 }

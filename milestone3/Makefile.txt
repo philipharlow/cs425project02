@@ -1,0 +1,6 @@
+all: serverProxy clientProxy
+
+serverProxy: serverProxy.c
+	gcc -Wall -o serverProxy serverProxy.c
+clientProxy: clientProxy.c
+	gcc -Wall -o clientProxy clientProxy.c

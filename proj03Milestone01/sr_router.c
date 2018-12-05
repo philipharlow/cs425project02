@@ -25,6 +25,7 @@
 
 void handleArp(struct sr_instance*, uint8_t*, unsigned int, char* );
 void handleForward(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface );
+void forwardPacket(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, uint8_t* desthwaddr );
 void sendReply(struct sr_instance*, uint8_t*, unsigned int, char*, struct sr_if* );
 void makeArp(
         struct sr_arphdr* arpHdr,
@@ -224,7 +225,7 @@ void handleForward(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
     if (!rtptr) {
         rtptr = sr->routing_table;          // eth0
         if ((cachedEntry = arpSearchCache(rtptr->gw.s_addr)) > -1) {
-            forwardPacket(sr, packet, len, rtptr->interface, arpReturnEntryMac(cachedEntry));
+            forwardPacket(sr, packet, len, rtptr->interface, (uint8_t*)&arpCacheEntries[cachedEntry].ar_sha);
         } else {
             cachePacket(sr, packet, len, rtptr);
         }
@@ -234,7 +235,7 @@ void handleForward(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
      * otherwise, cache the packet and wait for an ARP reply
      * to tell us the correct MAC address to use */
     if ((cachedEntry = arpSearchCache(rtptr->gw.s_addr)) > -1) {
-        forwardPacket(sr, packet, len, rtptr->interface, arpReturnEntryMac(cachedEntry));       
+        forwardPacket(sr, packet, len, rtptr->interface, (uint8_t*)&arpCacheEntries[cachedEntry].ar_sha);
     } else {
 		struct ip* ipHeader = (struct ip*)(packet+14);
 		int i;
@@ -256,6 +257,31 @@ void handleForward(struct sr_instance* sr, uint8_t* packet, unsigned int len, ch
 		packetCacheEntries[i].arps = 1;
 		packetCacheEntries[i].timeCached = time(NULL);
     }
+}
+
+/*--------------------------------------------------------------------- 
+ * Method: void forwardPacket(struct sr_instance*, uint8_t*,
+ *                            unsigned int, char* )
+ *
+ * This will forward a packet using the destinations hardware address.
+ *---------------------------------------------------------------------*/
+void forwardPacket(struct sr_instance* sr, uint8_t* packet, unsigned int len, char* interface, uint8_t* desthwaddr ){
+    struct sr_ethernet_hdr* ethernetHeader = (struct sr_ethernet_hdr*)packet;
+    struct ip* ipHeader = (struct ip*)(packet+14);
+    struct in_addr forwarded;
+    int i;
+    
+    makeethernet(ethernetHeader, ntohs(ethernetHeader->ether_type),
+            sr_get_interface(sr, interface)->addr, desthwaddr);
+
+    sr_send_packet(sr, packet, len, interface);
+
+    // log on send
+    forwarded.s_addr = ipHeader->ip_dst.s_addr;
+    printf("<- Forwarded packet with ip_dst %s to ", inet_ntoa(forwarded));
+    for (i = 0; i < ETHER_ADDR_LEN; i++)
+        printf("%2.2x", ethernetHeader->ether_dhost[i]);
+    printf("\n");
 }
 
 /*---------------------------------------------------------------------
